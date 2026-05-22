@@ -221,210 +221,179 @@ def generate_html(short: dict, long_: dict, diff: dict) -> str:
     long_sub_res  = [i for i, a in enumerate(diff["long_annot"])  if i > 0 and a == "sub"]
     short_sub_res = [i for i, a in enumerate(diff["short_annot"]) if i > 0 and a == "sub"]
 
-    short_js = json.dumps({k: short[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})
-    long_js  = json.dumps({k: long_[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})
+    short_js = json.dumps({"cif": short["cif"]})
+    long_js  = json.dumps({"cif": long_["cif"]})
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Allele Comparison — {short["name"]} vs {long_["name"]}</title>
 <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}}
-header{{padding:.6rem 1.2rem;border-bottom:1px solid #30363d;flex-shrink:0;display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap}}
-header h1{{font-size:1rem;font-weight:600}}
-header p{{font-size:.78rem;color:#8b949e}}
-.controls{{display:flex;gap:.5rem;padding:.4rem 1.2rem;border-bottom:1px solid #30363d;background:#161b22;flex-shrink:0;align-items:center;flex-wrap:wrap}}
-.clabel{{font-size:.72rem;color:#8b949e;margin-right:.1rem}}
-.cbtn{{padding:.22rem .6rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
-.cbtn.active{{border-color:#388bfd;color:#58a6ff;background:#0d1f3a}}
-.cbtn:hover:not(.active){{background:#30363d;color:#e6edf3}}
-.sep{{width:1px;background:#30363d;align-self:stretch;margin:0 .3rem}}
-.sync-btn{{padding:.22rem .6rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
-.sync-btn.on{{border-color:#3fb950;color:#3fb950;background:#0d2f17}}
-.legend{{display:flex;gap:.75rem;align-items:center;margin-left:auto;flex-wrap:wrap}}
-.li{{display:flex;align-items:center;gap:.28rem;font-size:.67rem;color:#8b949e}}
-.ld{{width:8px;height:8px;border-radius:2px;flex-shrink:0}}
-.seq-panel{{padding:.35rem 1.2rem;border-bottom:1px solid #30363d;background:#0d1117;flex-shrink:0;overflow-x:auto}}
-.seq-title{{font-size:.63rem;color:#8b949e;margin-bottom:.15rem;font-style:italic}}
-.seq-row{{font-family:'Courier New',monospace;font-size:.7rem;line-height:1.55;white-space:nowrap;display:flex;align-items:center}}
-.seq-label{{color:#556070;min-width:50px;font-size:.63rem;flex-shrink:0}}
-span.ins{{color:#FF6B35;font-weight:600}}
-span.sub{{color:#FFD700;font-weight:600}}
-span.match{{color:#4a9060}}
-span.gap{{color:#30363d}}
-.stats-grid{{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #30363d;flex-shrink:0}}
-.stats-col{{display:flex;gap:1.2rem;padding:.32rem 1.2rem;background:#161b22;flex-wrap:wrap;align-items:center}}
-.stats-col:first-child{{border-right:1px solid #30363d}}
-.stat{{display:flex;flex-direction:column}}
-.stat-label{{font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:#8b949e}}
-.stat-value{{font-size:.82rem;font-weight:600}}
-.viewers{{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#30363d;flex:1;min-height:0}}
-.viewer-wrap{{background:#0d1117;display:flex;flex-direction:column;min-height:0;padding:.45rem .5rem .5rem}}
-.viewer-title{{font-size:.7rem;color:#8b949e;margin-bottom:.25rem;flex-shrink:0;font-weight:500;padding-left:.2rem}}
-.viewer-div{{flex:1;min-height:0;border-radius:3px;overflow:hidden}}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ background: #0d1117; color: #e6edf3; font-family: system-ui, sans-serif; overflow: hidden; }}
+
+#top {{ border-bottom: 1px solid #30363d; }}
+#header {{ padding: .55rem 1.2rem; display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }}
+#header h1 {{ font-size: .95rem; font-weight: 600; }}
+#header p  {{ font-size: .75rem; color: #8b949e; }}
+
+#toolbar {{ display: flex; align-items: center; gap: .6rem; padding: .38rem 1.2rem;
+            background: #161b22; border-bottom: 1px solid #30363d; flex-wrap: wrap; }}
+.sync-btn {{ padding: .22rem .65rem; border-radius: 4px; border: 1px solid #3fb950;
+             background: #0d2f17; color: #3fb950; cursor: pointer; font-size: .72rem; }}
+.sync-btn.off {{ border-color: #30363d; background: #21262d; color: #8b949e; }}
+.legend {{ display: flex; gap: .7rem; flex-wrap: wrap; margin-left: auto; }}
+.li {{ display: flex; align-items: center; gap: .28rem; font-size: .67rem; color: #8b949e; }}
+.ld {{ width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }}
+
+#seq-panel {{ padding: .32rem 1.2rem; border-bottom: 1px solid #30363d; overflow-x: auto; }}
+.seq-title {{ font-size: .62rem; color: #556070; margin-bottom: .12rem; font-style: italic; }}
+.seq-row {{ font-family: 'Courier New', monospace; font-size: .69rem; line-height: 1.55;
+            white-space: nowrap; display: flex; align-items: center; }}
+.seq-label {{ color: #556070; min-width: 48px; font-size: .62rem; flex-shrink: 0; }}
+span.ins   {{ color: #FF6B35; font-weight: 700; }}
+span.sub   {{ color: #FFD700; font-weight: 700; }}
+span.match {{ color: #5a7ea8; }}
+span.gap   {{ color: #2a3040; }}
+
+#stats {{ display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #30363d; }}
+.sc {{ display: flex; gap: 1.1rem; padding: .3rem 1.2rem; background: #161b22;
+      flex-wrap: wrap; align-items: center; }}
+.sc:first-child {{ border-right: 1px solid #30363d; }}
+.sv {{ display: flex; flex-direction: column; }}
+.sl {{ font-size: .58rem; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; }}
+.sm {{ font-size: .8rem; font-weight: 600; }}
+
+#viewers {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: #30363d; }}
+.vw {{ background: #0d1117; display: flex; flex-direction: column; }}
+.vt {{ font-size: .7rem; font-weight: 500; padding: .3rem .6rem .15rem; flex-shrink: 0; }}
+.vd {{ flex: 1; }}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Allele Comparison</h1>
-  <p>{short["name"]} vs {long_["name"]} &ensp;&mdash;&ensp; Chain A identical (121 aa) &nbsp;|&nbsp; Chain B: {long_["chain_b_len"]} aa (long) vs {short["chain_b_len"]} aa (short) &nbsp;|&nbsp; Structures superimposed on chain A</p>
-</header>
-
-<div class="controls">
-  <span class="clabel">Color:</span>
-  <button class="cbtn active" onclick="setColor('diff',this)">Differences</button>
-  <button class="cbtn" onclick="setColor('plddt',this)">pLDDT</button>
-  <button class="cbtn" onclick="setColor('chain',this)">Chain</button>
-  <div class="sep"></div>
-  <button class="sync-btn on" id="sync-btn" onclick="toggleSync()">Sync rotation: ON</button>
-  <div class="legend">
-    <div class="li"><div class="ld" style="background:#6c8ebf"></div>Chain A</div>
-    <div class="li"><div class="ld" style="background:#4a9060"></div>Chain B (identical)</div>
-    <div class="li"><div class="ld" style="background:#FF6B35"></div>Extra residues (long only)</div>
-    <div class="li"><div class="ld" style="background:#FFD700"></div>Substitution</div>
+<div id="top">
+  <div id="header">
+    <h1>Allele Comparison</h1>
+    <p>{short["name"]} vs {long_["name"]} &mdash; Chain A: 121 aa (identical) &nbsp;|&nbsp;
+       Chain B: {long_["chain_b_len"]} aa (long) vs {short["chain_b_len"]} aa (short) &nbsp;|&nbsp;
+       Aligned on chain A</p>
+  </div>
+  <div id="toolbar">
+    <button class="sync-btn" id="sync-btn" onclick="toggleSync()">Sync rotation: ON</button>
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#5b8dd9"></div>Chain A</div>
+      <div class="li"><div class="ld" style="background:#9b6cbf"></div>Chain B</div>
+      <div class="li"><div class="ld" style="background:#FF6B35"></div>Extra residues (long only)</div>
+      <div class="li"><div class="ld" style="background:#FFD700"></div>Substitution</div>
+    </div>
+  </div>
+  <div id="seq-panel">
+    <div class="seq-title">Chain B alignment</div>
+    {seq_panel}
+  </div>
+  <div id="stats">
+    <div class="sc">
+      <div class="sv"><div class="sl">Allele</div><div class="sm" style="color:#7aade8">{short["name"]}</div></div>
+      <div class="sv"><div class="sl">Ranking</div><div class="sm">{short["ranking_score"]}</div></div>
+      <div class="sv"><div class="sl">ipTM</div><div class="sm">{short["iptm"]}</div></div>
+      <div class="sv"><div class="sl">pTM</div><div class="sm">{short["ptm"]}</div></div>
+    </div>
+    <div class="sc">
+      <div class="sv"><div class="sl">Allele</div><div class="sm" style="color:#e8947a">{long_["name"]}</div></div>
+      <div class="sv"><div class="sl">Ranking</div><div class="sm">{long_["ranking_score"]}</div></div>
+      <div class="sv"><div class="sl">ipTM</div><div class="sm">{long_["iptm"]}</div></div>
+      <div class="sv"><div class="sl">pTM</div><div class="sm">{long_["ptm"]}</div></div>
+    </div>
   </div>
 </div>
 
-<div class="seq-panel">
-  <div class="seq-title">Chain B sequence alignment</div>
-  {seq_panel}
-</div>
-
-<div class="stats-grid">
-  <div class="stats-col">
-    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#6c9ed4">{short["name"]}</div></div>
-    <div class="stat"><div class="stat-label">Ranking Score</div><div class="stat-value">{short["ranking_score"]}</div></div>
-    <div class="stat"><div class="stat-label">ipTM</div><div class="stat-value">{short["iptm"]}</div></div>
-    <div class="stat"><div class="stat-label">pTM</div><div class="stat-value">{short["ptm"]}</div></div>
+<div id="viewers">
+  <div class="vw">
+    <div class="vt" style="color:#7aade8">{short["name"]} — Chain B {short["chain_b_len"]} aa</div>
+    <div class="vd" id="vs"></div>
   </div>
-  <div class="stats-col">
-    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#d47a6c">{long_["name"]}</div></div>
-    <div class="stat"><div class="stat-label">Ranking Score</div><div class="stat-value">{long_["ranking_score"]}</div></div>
-    <div class="stat"><div class="stat-label">ipTM</div><div class="stat-value">{long_["iptm"]}</div></div>
-    <div class="stat"><div class="stat-label">pTM</div><div class="stat-value">{long_["ptm"]}</div></div>
-  </div>
-</div>
-
-<div class="viewers">
-  <div class="viewer-wrap">
-    <div class="viewer-title" style="color:#6c9ed4">{short["name"]} — Chain B: {short["chain_b_len"]} aa</div>
-    <div class="viewer-div" id="viewer-short"></div>
-  </div>
-  <div class="viewer-wrap">
-    <div class="viewer-title" style="color:#d47a6c">{long_["name"]} — Chain B: {long_["chain_b_len"]} aa</div>
-    <div class="viewer-div" id="viewer-long"></div>
+  <div class="vw">
+    <div class="vt" style="color:#e8947a">{long_["name"]} — Chain B {long_["chain_b_len"]} aa</div>
+    <div class="vd" id="vl"></div>
   </div>
 </div>
 
 <script>
-const SHORT = {short_js};
-const LONG  = {long_js};
+const SHORT_CIF = {short_js}.cif;
+const LONG_CIF  = {long_js}.cif;
 const LONG_INS  = {json.dumps(long_ins_res)};
 const LONG_SUB  = {json.dumps(long_sub_res)};
 const SHORT_SUB = {json.dumps(short_sub_res)};
 
-let vShort = null, vLong = null;
-let colorMode = 'diff';
-let syncOn = true;
-let syncing = false;
+let vS = null, vL = null, syncOn = true, syncing = false;
 
-function plddtColor(b) {{
-  if (b >= 90) return '#0053D6';
-  if (b >= 70) return '#65CBF3';
-  if (b >= 50) return '#FFDB13';
-  return '#FF7D45';
+// Size the viewers to fill remaining window height
+function sizeViewers() {{
+  const topH = document.getElementById('top').offsetHeight;
+  const vwH  = window.innerHeight - topH;
+  document.getElementById('viewers').style.height = vwH + 'px';
+  document.querySelectorAll('.vd').forEach(el => {{
+    el.style.height = (vwH - el.previousElementSibling.offsetHeight) + 'px';
+  }});
 }}
 
-function applyStyle(v, subRes, insRes) {{
-  if (colorMode === 'plddt') {{
-    v.setStyle({{}}, {{cartoon: {{colorfunc: a => plddtColor(a.b)}}}});
-  }} else if (colorMode === 'chain') {{
-    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#6c8ebf'}}}});
-    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#9b6cbf'}}}});
-  }} else {{
-    // diff mode: base colors
-    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#6c8ebf'}}}});
-    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#4a9060'}}}});
-  }}
-  // Difference highlights always shown in diff mode
-  if (colorMode === 'diff') {{
-    if (insRes.length) {{
-      v.setStyle({{chain: 'B', resi: insRes.join(',')}}, {{cartoon: {{color: '#FF6B35'}}}});
-    }}
-    if (subRes.length) {{
-      v.setStyle({{chain: 'B', resi: subRes.join(',')}}, {{cartoon: {{color: '#FFD700'}}}});
-    }}
-  }}
+function color(v, subRes, insRes) {{
+  v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#5b8dd9'}}}});
+  v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#9b6cbf'}}}});
+  if (insRes.length)
+    v.setStyle({{chain: 'B', resi: insRes.join(',')}}, {{cartoon: {{color: '#FF6B35'}}}});
+  if (subRes.length)
+    v.setStyle({{chain: 'B', resi: subRes.join(',')}}, {{cartoon: {{color: '#FFD700'}}}});
   v.render();
 }}
 
-function initViewers() {{
+function init() {{
+  sizeViewers();
   const bg = '#0d1117';
-  vShort = $3Dmol.createViewer(document.getElementById('viewer-short'), {{backgroundColor: bg, antialias: true}});
-  vLong  = $3Dmol.createViewer(document.getElementById('viewer-long'),  {{backgroundColor: bg, antialias: true}});
+  vS = $3Dmol.createViewer(document.getElementById('vs'), {{backgroundColor: bg, antialias: true}});
+  vL = $3Dmol.createViewer(document.getElementById('vl'), {{backgroundColor: bg, antialias: true}});
 
-  vShort.addModel(SHORT.cif, 'cif');
-  applyStyle(vShort, SHORT_SUB, []);
-  vShort.zoomTo();
-  vShort.render();
+  vS.addModel(SHORT_CIF, 'cif');
+  vL.addModel(LONG_CIF,  'cif');
 
-  vLong.addModel(LONG.cif, 'cif');
-  applyStyle(vLong, LONG_SUB, LONG_INS);
-  vLong.zoomTo();
-  vLong.render();
+  color(vS, SHORT_SUB, []);
+  color(vL, LONG_SUB, LONG_INS);
 
-  // Start both viewers in the same orientation as the short structure
-  setTimeout(() => {{
-    const view = vShort.getView();
-    vLong.setView(view);
-    vLong.render();
-  }}, 100);
-}}
+  vS.zoomTo(); vS.render();
+  vL.zoomTo(); vL.render();
 
-function setColor(mode, btn) {{
-  colorMode = mode;
-  document.querySelectorAll('.cbtn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  applyStyle(vShort, SHORT_SUB, []);
-  applyStyle(vLong,  LONG_SUB,  LONG_INS);
+  // Match starting orientation
+  setTimeout(() => {{ vL.setView(vS.getView()); vL.render(); }}, 150);
 }}
 
 function toggleSync() {{
   syncOn = !syncOn;
   const btn = document.getElementById('sync-btn');
   btn.textContent = 'Sync rotation: ' + (syncOn ? 'ON' : 'OFF');
-  btn.classList.toggle('on', syncOn);
+  btn.classList.toggle('off', !syncOn);
 }}
 
-// Poll-based sync: mirror short → long rotation
-let lastView = null;
-function syncLoop() {{
-  if (syncOn && vShort && vLong && !syncing) {{
-    const v = vShort.getView();
-    const vs = JSON.stringify(v);
-    if (vs !== lastView) {{
-      lastView = vs;
-      syncing = true;
-      vLong.setView(v);
-      vLong.render();
+let lastV = null;
+(function loop() {{
+  if (syncOn && vS && vL && !syncing) {{
+    const v = JSON.stringify(vS.getView());
+    if (v !== lastV) {{
+      lastV = v; syncing = true;
+      vL.setView(JSON.parse(v)); vL.render();
       syncing = false;
     }}
   }}
-  requestAnimationFrame(syncLoop);
-}}
+  requestAnimationFrame(loop);
+}})();
 
-window.addEventListener('DOMContentLoaded', () => {{
-  initViewers();
-  syncLoop();
-  window.addEventListener('resize', () => {{
-    vShort && vShort.resize();
-    vLong  && vLong.resize();
-  }});
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => {{
+  sizeViewers();
+  vS && vS.resize();
+  vL && vL.resize();
 }});
 </script>
 </body>
