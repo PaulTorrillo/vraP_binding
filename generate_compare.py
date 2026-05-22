@@ -12,8 +12,10 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+
+# ── CIF helpers ───────────────────────────────────────────────────────────────
 
 def parse_cif_residue_plddts(cif_text: str):
     residue_atoms: dict = defaultdict(list)
@@ -41,6 +43,69 @@ def parse_cif_residue_plddts(cif_text: str):
     return chain_sorted("A"), chain_sorted("B")
 
 
+def parse_ca_coords(cif_text: str, chain: str = "A") -> dict:
+    """Return {resnum: np.array([x,y,z])} for Cα atoms of the given chain."""
+    coords = {}
+    for line in cif_text.splitlines():
+        if not line.startswith("ATOM"):
+            continue
+        parts = line.split()
+        if len(parts) < 13:
+            continue
+        try:
+            if parts[3] == "CA" and parts[6] == chain:
+                resnum = int(parts[8])
+                coords[resnum] = np.array([float(parts[10]), float(parts[11]), float(parts[12])])
+        except (ValueError, IndexError):
+            continue
+    return coords
+
+
+def kabsch_superimpose(ref_cif: str, mob_cif: str) -> str:
+    """
+    Superimpose mob_cif onto ref_cif using shared chain A Cα atoms (Kabsch algorithm).
+    Returns mob_cif text with transformed coordinates.
+    """
+    ref_ca = parse_ca_coords(ref_cif, "A")
+    mob_ca = parse_ca_coords(mob_cif, "A")
+
+    common = sorted(set(ref_ca) & set(mob_ca))
+    P = np.array([ref_ca[r] for r in common])   # reference (fixed)
+    Q = np.array([mob_ca[r] for r in common])   # mobile (to be rotated)
+
+    c_P = P.mean(axis=0)
+    c_Q = Q.mean(axis=0)
+    H = (Q - c_Q).T @ (P - c_P)
+    U, _, Vt = np.linalg.svd(H)
+    d = np.sign(np.linalg.det(Vt.T @ U.T))
+    R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T   # rotation matrix
+    t = c_P - c_Q @ R.T                         # translation
+
+    rmsd = float(np.sqrt(((( Q @ R.T + t) - P) ** 2).sum(axis=1).mean()))
+    print(f"  Chain A RMSD after superimposition: {rmsd:.2f} Å ({len(common)} Cα atoms)")
+
+    # Apply R, t to every atom in mob_cif
+    out_lines = []
+    for line in mob_cif.splitlines():
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            parts = line.split()
+            if len(parts) >= 13:
+                try:
+                    xyz = np.array([float(parts[10]), float(parts[11]), float(parts[12])])
+                    xyz2 = xyz @ R.T + t
+                    parts[10] = f"{xyz2[0]:.3f}"
+                    parts[11] = f"{xyz2[1]:.3f}"
+                    parts[12] = f"{xyz2[2]:.3f}"
+                    out_lines.append(" ".join(parts))
+                    continue
+                except (ValueError, IndexError):
+                    pass
+        out_lines.append(line)
+    return "\n".join(out_lines)
+
+
+# ── data loading ──────────────────────────────────────────────────────────────
+
 def load_best_model(zip_path: str) -> dict:
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
@@ -54,8 +119,7 @@ def load_best_model(zip_path: str) -> dict:
         seqs = [s["proteinChain"]["sequence"]
                 for s in req.get("sequences", []) if "proteinChain" in s]
 
-        # Pick highest-ranked model
-        best_i, best_score = indices[0], -1
+        best_i, best_score = indices[0], -1.0
         for i in indices:
             sc = json.loads(zf.read(f"{prefix}_summary_confidences_{i}.json"))
             if sc["ranking_score"] > best_score:
@@ -66,137 +130,99 @@ def load_best_model(zip_path: str) -> dict:
         full    = json.loads(zf.read(f"{prefix}_full_data_{best_i}.json"))
         plddt_a, plddt_b = parse_cif_residue_plddts(cif)
 
-        chain_a_len = sum(1 for c in full["token_chain_ids"] if c == "A")
-        chain_b_len = sum(1 for c in full["token_chain_ids"] if c == "B")
-
         return {
-            "name":         req.get("name", prefix),
-            "zip":          zip_path,
-            "cif":          cif,
+            "name":          req.get("name", prefix),
+            "cif":           cif,
             "ranking_score": round(summary["ranking_score"], 3),
             "iptm":          round(summary.get("iptm", 0), 3),
             "ptm":           round(summary.get("ptm", 0), 3),
-            "chain_pair_iptm": summary.get("chain_pair_iptm", []),
-            "pae":           full["pae"],
             "plddt_a":       plddt_a,
             "plddt_b":       plddt_b,
-            "seq_a":         seqs[0] if len(seqs) > 0 else "",
+            "seq_a":         seqs[0] if seqs else "",
             "seq_b":         seqs[1] if len(seqs) > 1 else "",
-            "chain_a_len":   chain_a_len,
-            "chain_b_len":   chain_b_len,
+            "chain_a_len":   sum(1 for c in full["token_chain_ids"] if c == "A"),
+            "chain_b_len":   sum(1 for c in full["token_chain_ids"] if c == "B"),
         }
 
 
-def compute_diff(seq_ref: str, seq_alt: str) -> dict:
-    """
-    Align seq_ref (short) against seq_alt (long) and return per-residue
-    annotation arrays (1-indexed residue numbers) for each sequence.
-    Returns:
-        ref_annot:  list of ('match'|'sub'|'del') per ref residue (1-indexed)
-        alt_annot:  list of ('match'|'sub'|'ins'|'del') per alt residue (1-indexed)
-        aln_ref, aln_alt, aln_mark: alignment strings for display
-    """
-    m = difflib.SequenceMatcher(None, seq_alt, seq_ref, autojunk=False)
+# ── sequence diff ─────────────────────────────────────────────────────────────
 
-    ref_annot = ["match"] * (len(seq_ref) + 1)   # index 1..len
-    alt_annot = ["match"] * (len(seq_alt) + 1)
+def compute_diff(seq_short: str, seq_long: str) -> dict:
+    """Align seq_short (ref) against seq_long (alt). Returns per-residue annotations."""
+    m = difflib.SequenceMatcher(None, seq_long, seq_short, autojunk=False)
+
+    short_annot = ["match"] * (len(seq_short) + 1)
+    long_annot  = ["match"] * (len(seq_long)  + 1)
 
     for op, i1, i2, j1, j2 in m.get_opcodes():
-        if op == "equal":
-            pass
-        elif op == "insert":
-            # present in ref only (deletion from alt perspective)
-            for j in range(j1, j2):
-                ref_annot[j + 1] = "del"
-        elif op == "delete":
-            # present in alt only (insertion = extra residues)
+        if op == "delete":                    # in long only
             for i in range(i1, i2):
-                alt_annot[i + 1] = "ins"
+                long_annot[i + 1] = "ins"
         elif op == "replace":
             for i in range(i1, i2):
-                alt_annot[i + 1] = "sub"
+                long_annot[i + 1] = "sub"
             for j in range(j1, j2):
-                ref_annot[j + 1] = "sub"
+                short_annot[j + 1] = "sub"
 
-    # Build display alignment strings
-    blocks = m.get_matching_blocks()
+    # Build alignment display strings
     la, sa, mk = [], [], []
-    pi, pj = 0, 0
-    for bi, bj, bsize in blocks:
-        gap_i = seq_alt[pi:bi]
-        gap_j = seq_ref[pj:bj]
-        maxg  = max(len(gap_i), len(gap_j))
-        if maxg:
-            la.append(gap_i.ljust(maxg, "-"))
-            sa.append(gap_j.ljust(maxg, "-"))
-            mk.append(" " * maxg)
+    pi = pj = 0
+    for bi, bj, bsize in m.get_matching_blocks():
+        gi, gj = seq_long[pi:bi], seq_short[pj:bj]
+        mg = max(len(gi), len(gj))
+        if mg:
+            la.append(gi.ljust(mg, "-"))
+            sa.append(gj.ljust(mg, "-"))
+            mk.append(" " * mg)
         if bsize:
-            la.append(seq_alt[bi:bi+bsize])
-            sa.append(seq_ref[bj:bj+bsize])
+            la.append(seq_long[bi:bi+bsize])
+            sa.append(seq_short[bj:bj+bsize])
             mk.append("|" * bsize)
         pi, pj = bi + bsize, bj + bsize
 
     return {
-        "ref_annot": ref_annot,
-        "alt_annot": alt_annot,
-        "aln_ref":   "".join(sa),
-        "aln_alt":   "".join(la),
-        "aln_mark":  "".join(mk),
+        "short_annot": short_annot,
+        "long_annot":  long_annot,
+        "aln_long":    "".join(la),
+        "aln_short":   "".join(sa),
+        "aln_mark":    "".join(mk),
     }
 
 
-def build_seq_panel_html(diff: dict, short_seq_b: str, long_seq_b: str) -> str:
-    """Build coloured HTML sequence alignment for chain B."""
-    aln_long  = diff["aln_alt"]
-    aln_short = diff["aln_ref"]
-    mark      = diff["aln_mark"]
+def build_seq_html(diff: dict) -> str:
+    aln_long  = diff["aln_long"]
+    aln_short = diff["aln_short"]
 
     def span(char, cls):
-        if char == "-":
-            return f'<span class="gap">-</span>'
-        return f'<span class="{cls}">{char}</span>'
+        return f'<span class="gap">-</span>' if char == "-" else f'<span class="{cls}">{char}</span>'
 
-    long_html  = []
-    short_html = []
-    li = lj = 0  # residue counters (0-based, for annotation lookup)
+    long_html, short_html = [], []
+    li = lj = 0
 
     for pos in range(len(aln_long)):
-        lc = aln_long[pos]
-        sc = aln_short[pos]
-
-        if lc != "-":
-            li += 1
-            ann = diff["alt_annot"][li]
-        else:
-            ann = "gap"
-
-        if sc != "-":
-            lj += 1
-            s_ann = diff["ref_annot"][lj]
-        else:
-            s_ann = "gap"
-
-        long_html.append(span(lc, ann))
-        short_html.append(span(sc, s_ann))
+        lc, sc = aln_long[pos], aln_short[pos]
+        li += lc != "-"
+        lj += sc != "-"
+        long_html.append(span(lc,  diff["long_annot"][li]  if lc != "-" else "gap"))
+        short_html.append(span(sc, diff["short_annot"][lj] if sc != "-" else "gap"))
 
     return (
-        '<div class="seq-row"><span class="seq-label">Long&nbsp;&nbsp;</span>'
-        + "".join(long_html) + "</div>"
-        '<div class="seq-row"><span class="seq-label">Short&nbsp;</span>'
-        + "".join(short_html) + "</div>"
+        '<div class="seq-row"><span class="seq-label">Long&nbsp;&nbsp;</span>'  + "".join(long_html)  + "</div>"
+        '<div class="seq-row"><span class="seq-label">Short&nbsp;</span>' + "".join(short_html) + "</div>"
     )
 
 
-# ── HTML generation ──────────────────────────────────────────────────────────
+# ── HTML ──────────────────────────────────────────────────────────────────────
 
 def generate_html(short: dict, long_: dict, diff: dict) -> str:
-    seq_panel = build_seq_panel_html(diff, short["seq_b"], long_["seq_b"])
+    seq_panel = build_seq_html(diff)
 
-    # Residue numbers that are different (for 3Dmol highlighting)
-    # alt = long, ref = short
-    long_ins_res  = [i for i, a in enumerate(diff["alt_annot"]) if i > 0 and a == "ins"]
-    long_sub_res  = [i for i, a in enumerate(diff["alt_annot"]) if i > 0 and a == "sub"]
-    short_sub_res = [i for i, a in enumerate(diff["ref_annot"]) if i > 0 and a == "sub"]
+    long_ins_res  = [i for i, a in enumerate(diff["long_annot"])  if i > 0 and a == "ins"]
+    long_sub_res  = [i for i, a in enumerate(diff["long_annot"])  if i > 0 and a == "sub"]
+    short_sub_res = [i for i, a in enumerate(diff["short_annot"]) if i > 0 and a == "sub"]
+
+    short_js = json.dumps({k: short[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})
+    long_js  = json.dumps({k: long_[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -205,78 +231,79 @@ def generate_html(short: dict, long_: dict, diff: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Allele Comparison — {short["name"]} vs {long_["name"]}</title>
 <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}}
-header{{padding:.6rem 1.2rem;border-bottom:1px solid #30363d;flex-shrink:0;display:flex;align-items:baseline;gap:1rem}}
+header{{padding:.6rem 1.2rem;border-bottom:1px solid #30363d;flex-shrink:0;display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap}}
 header h1{{font-size:1rem;font-weight:600}}
 header p{{font-size:.78rem;color:#8b949e}}
-.controls{{display:flex;gap:.5rem;padding:.45rem 1.2rem;border-bottom:1px solid #30363d;background:#161b22;flex-shrink:0;align-items:center;flex-wrap:wrap}}
-.controls-label{{font-size:.72rem;color:#8b949e;margin-right:.2rem}}
-.cbtn{{padding:.25rem .65rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
-.cbtn.active{{border-color:#388bfd;color:#58a6ff}}
+.controls{{display:flex;gap:.5rem;padding:.4rem 1.2rem;border-bottom:1px solid #30363d;background:#161b22;flex-shrink:0;align-items:center;flex-wrap:wrap}}
+.clabel{{font-size:.72rem;color:#8b949e;margin-right:.1rem}}
+.cbtn{{padding:.22rem .6rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
+.cbtn.active{{border-color:#388bfd;color:#58a6ff;background:#0d1f3a}}
 .cbtn:hover:not(.active){{background:#30363d;color:#e6edf3}}
-.sep{{width:1px;background:#30363d;margin:0 .25rem;align-self:stretch}}
-.sync-btn{{padding:.25rem .65rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
+.sep{{width:1px;background:#30363d;align-self:stretch;margin:0 .3rem}}
+.sync-btn{{padding:.22rem .6rem;border-radius:4px;border:1px solid #30363d;background:#21262d;color:#8b949e;cursor:pointer;font-size:.72rem}}
 .sync-btn.on{{border-color:#3fb950;color:#3fb950;background:#0d2f17}}
-.legend{{display:flex;gap:.8rem;align-items:center;margin-left:auto}}
-.li{{display:flex;align-items:center;gap:.3rem;font-size:.68rem;color:#8b949e}}
-.ld{{width:9px;height:9px;border-radius:2px;flex-shrink:0}}
-.seq-panel{{padding:.4rem 1.2rem;border-bottom:1px solid #30363d;background:#0d1117;flex-shrink:0;overflow-x:auto}}
-.seq-row{{font-family:monospace;font-size:.7rem;line-height:1.6;white-space:nowrap;display:flex;align-items:center}}
-.seq-label{{color:#8b949e;min-width:52px;font-size:.65rem}}
-span.ins{{color:#FF6B35;font-weight:700}}
-span.sub{{color:#FFD700;font-weight:700}}
-span.match{{color:#3fb950}}
-span.del{{color:#8b949e;text-decoration:underline dotted}}
+.legend{{display:flex;gap:.75rem;align-items:center;margin-left:auto;flex-wrap:wrap}}
+.li{{display:flex;align-items:center;gap:.28rem;font-size:.67rem;color:#8b949e}}
+.ld{{width:8px;height:8px;border-radius:2px;flex-shrink:0}}
+.seq-panel{{padding:.35rem 1.2rem;border-bottom:1px solid #30363d;background:#0d1117;flex-shrink:0;overflow-x:auto}}
+.seq-title{{font-size:.63rem;color:#8b949e;margin-bottom:.15rem;font-style:italic}}
+.seq-row{{font-family:'Courier New',monospace;font-size:.7rem;line-height:1.55;white-space:nowrap;display:flex;align-items:center}}
+.seq-label{{color:#556070;min-width:50px;font-size:.63rem;flex-shrink:0}}
+span.ins{{color:#FF6B35;font-weight:600}}
+span.sub{{color:#FFD700;font-weight:600}}
+span.match{{color:#4a9060}}
 span.gap{{color:#30363d}}
 .stats-grid{{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #30363d;flex-shrink:0}}
-.stats-col{{display:flex;gap:1.2rem;padding:.35rem 1.2rem;background:#161b22;flex-wrap:wrap}}
+.stats-col{{display:flex;gap:1.2rem;padding:.32rem 1.2rem;background:#161b22;flex-wrap:wrap;align-items:center}}
 .stats-col:first-child{{border-right:1px solid #30363d}}
 .stat{{display:flex;flex-direction:column}}
-.stat-label{{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;color:#8b949e}}
-.stat-value{{font-size:.85rem;font-weight:600}}
+.stat-label{{font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:#8b949e}}
+.stat-value{{font-size:.82rem;font-weight:600}}
 .viewers{{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#30363d;flex:1;min-height:0}}
-.viewer-wrap{{background:#0d1117;display:flex;flex-direction:column;min-height:0;padding:.5rem}}
-.viewer-title{{font-size:.72rem;color:#8b949e;margin-bottom:.3rem;flex-shrink:0;font-weight:500}}
-.viewer-div{{flex:1;min-height:0;border-radius:3px;overflow:hidden;position:relative}}
+.viewer-wrap{{background:#0d1117;display:flex;flex-direction:column;min-height:0;padding:.45rem .5rem .5rem}}
+.viewer-title{{font-size:.7rem;color:#8b949e;margin-bottom:.25rem;flex-shrink:0;font-weight:500;padding-left:.2rem}}
+.viewer-div{{flex:1;min-height:0;border-radius:3px;overflow:hidden}}
 </style>
 </head>
 <body>
+
 <header>
   <h1>Allele Comparison</h1>
-  <p>{short["name"]} &nbsp;vs&nbsp; {long_["name"]}&ensp;&mdash;&ensp;Chain A identical &nbsp;|&nbsp; Chain B: {long_["chain_b_len"]} aa (long) vs {short["chain_b_len"]} aa (short)</p>
+  <p>{short["name"]} vs {long_["name"]} &ensp;&mdash;&ensp; Chain A identical (121 aa) &nbsp;|&nbsp; Chain B: {long_["chain_b_len"]} aa (long) vs {short["chain_b_len"]} aa (short) &nbsp;|&nbsp; Structures superimposed on chain A</p>
 </header>
 
 <div class="controls">
-  <span class="controls-label">Coloring:</span>
-  <button class="cbtn active" onclick="setColor('plddt',this)">pLDDT</button>
+  <span class="clabel">Color:</span>
+  <button class="cbtn active" onclick="setColor('diff',this)">Differences</button>
+  <button class="cbtn" onclick="setColor('plddt',this)">pLDDT</button>
   <button class="cbtn" onclick="setColor('chain',this)">Chain</button>
-  <button class="cbtn" onclick="setColor('diff',this)">Differences</button>
   <div class="sep"></div>
-  <button class="sync-btn" id="sync-btn" onclick="toggleSync()">Sync rotation: OFF</button>
+  <button class="sync-btn on" id="sync-btn" onclick="toggleSync()">Sync rotation: ON</button>
   <div class="legend">
+    <div class="li"><div class="ld" style="background:#6c8ebf"></div>Chain A</div>
+    <div class="li"><div class="ld" style="background:#4a9060"></div>Chain B (identical)</div>
     <div class="li"><div class="ld" style="background:#FF6B35"></div>Extra residues (long only)</div>
     <div class="li"><div class="ld" style="background:#FFD700"></div>Substitution</div>
-    <div class="li"><div class="ld" style="background:#3fb950"></div>Identical</div>
   </div>
 </div>
 
 <div class="seq-panel">
-  <div style="font-size:.65rem;color:#8b949e;margin-bottom:.2rem;font-style:italic">Chain B alignment</div>
+  <div class="seq-title">Chain B sequence alignment</div>
   {seq_panel}
 </div>
 
 <div class="stats-grid">
   <div class="stats-col">
-    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#4C8CF5">{short["name"]}</div></div>
+    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#6c9ed4">{short["name"]}</div></div>
     <div class="stat"><div class="stat-label">Ranking Score</div><div class="stat-value">{short["ranking_score"]}</div></div>
     <div class="stat"><div class="stat-label">ipTM</div><div class="stat-value">{short["iptm"]}</div></div>
     <div class="stat"><div class="stat-label">pTM</div><div class="stat-value">{short["ptm"]}</div></div>
   </div>
   <div class="stats-col">
-    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#F07B4C">{long_["name"]}</div></div>
+    <div class="stat"><div class="stat-label">Allele</div><div class="stat-value" style="color:#d47a6c">{long_["name"]}</div></div>
     <div class="stat"><div class="stat-label">Ranking Score</div><div class="stat-value">{long_["ranking_score"]}</div></div>
     <div class="stat"><div class="stat-label">ipTM</div><div class="stat-value">{long_["iptm"]}</div></div>
     <div class="stat"><div class="stat-label">pTM</div><div class="stat-value">{long_["ptm"]}</div></div>
@@ -285,27 +312,25 @@ span.gap{{color:#30363d}}
 
 <div class="viewers">
   <div class="viewer-wrap">
-    <div class="viewer-title" style="color:#4C8CF5">{short["name"]} &mdash; Chain B: {short["chain_b_len"]} aa</div>
+    <div class="viewer-title" style="color:#6c9ed4">{short["name"]} — Chain B: {short["chain_b_len"]} aa</div>
     <div class="viewer-div" id="viewer-short"></div>
   </div>
   <div class="viewer-wrap">
-    <div class="viewer-title" style="color:#F07B4C">{long_["name"]} &mdash; Chain B: {long_["chain_b_len"]} aa</div>
+    <div class="viewer-title" style="color:#d47a6c">{long_["name"]} — Chain B: {long_["chain_b_len"]} aa</div>
     <div class="viewer-div" id="viewer-long"></div>
   </div>
 </div>
 
 <script>
-const SHORT = {json.dumps({k: short[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})};
-const LONG  = {json.dumps({k: long_[k] for k in ["cif","plddt_a","plddt_b","chain_a_len","chain_b_len","seq_a","seq_b"]})};
-
-// Residue numbers of differences (1-indexed, chain B)
-const LONG_INS  = {json.dumps(long_ins_res)};   // extra residues in long only
-const LONG_SUB  = {json.dumps(long_sub_res)};   // substitution in long
-const SHORT_SUB = {json.dumps(short_sub_res)};  // substitution in short
+const SHORT = {short_js};
+const LONG  = {long_js};
+const LONG_INS  = {json.dumps(long_ins_res)};
+const LONG_SUB  = {json.dumps(long_sub_res)};
+const SHORT_SUB = {json.dumps(short_sub_res)};
 
 let vShort = null, vLong = null;
-let colorMode = 'plddt';
-let syncOn = false;
+let colorMode = 'diff';
+let syncOn = true;
 let syncing = false;
 
 function plddtColor(b) {{
@@ -315,61 +340,58 @@ function plddtColor(b) {{
   return '#FF7D45';
 }}
 
+function applyStyle(v, subRes, insRes) {{
+  if (colorMode === 'plddt') {{
+    v.setStyle({{}}, {{cartoon: {{colorfunc: a => plddtColor(a.b)}}}});
+  }} else if (colorMode === 'chain') {{
+    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#6c8ebf'}}}});
+    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#9b6cbf'}}}});
+  }} else {{
+    // diff mode: base colors
+    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#6c8ebf'}}}});
+    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#4a9060'}}}});
+  }}
+  // Difference highlights always shown in diff mode
+  if (colorMode === 'diff') {{
+    if (insRes.length) {{
+      v.setStyle({{chain: 'B', resi: insRes.join(',')}}, {{cartoon: {{color: '#FF6B35'}}}});
+    }}
+    if (subRes.length) {{
+      v.setStyle({{chain: 'B', resi: subRes.join(',')}}, {{cartoon: {{color: '#FFD700'}}}});
+    }}
+  }}
+  v.render();
+}}
+
 function initViewers() {{
   const bg = '#0d1117';
   vShort = $3Dmol.createViewer(document.getElementById('viewer-short'), {{backgroundColor: bg, antialias: true}});
   vLong  = $3Dmol.createViewer(document.getElementById('viewer-long'),  {{backgroundColor: bg, antialias: true}});
-  loadAndRender(vShort, SHORT, SHORT_SUB, []);
-  loadAndRender(vLong,  LONG,  LONG_SUB,  LONG_INS);
-}}
 
-function loadAndRender(v, data, subRes, insRes) {{
-  v.clear();
-  v.addModel(data.cif, 'cif');
-  applyStyle(v, data, subRes, insRes);
-  v.zoomTo();
-  v.render();
-}}
+  vShort.addModel(SHORT.cif, 'cif');
+  applyStyle(vShort, SHORT_SUB, []);
+  vShort.zoomTo();
+  vShort.render();
 
-function applyStyle(v, data, subRes, insRes) {{
-  if (colorMode === 'plddt') {{
-    v.setStyle({{}}, {{cartoon: {{colorfunc: a => plddtColor(a.b)}}}});
-  }} else if (colorMode === 'chain') {{
-    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#4C8CF5'}}}});
-    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#9b59b6'}}}});
-  }} else if (colorMode === 'diff') {{
-    // base: chain A gray, chain B green
-    v.setStyle({{chain: 'A'}}, {{cartoon: {{color: '#555e6a'}}}});
-    v.setStyle({{chain: 'B'}}, {{cartoon: {{color: '#3fb950'}}}});
-  }}
+  vLong.addModel(LONG.cif, 'cif');
+  applyStyle(vLong, LONG_SUB, LONG_INS);
+  vLong.zoomTo();
+  vLong.render();
 
-  // Always overlay difference highlighting on chain B
-  if (insRes.length) {{
-    const resi = insRes.join(',');
-    v.setStyle({{chain: 'B', resi: resi}}, {{
-      cartoon: {{color: '#FF6B35'}},
-      stick:   {{color: '#FF6B35', radius: 0.15}},
-    }});
-    v.addStyle({{chain: 'B', resi: resi}}, {{sphere: {{color: '#FF6B35', radius: 0.6}}}});
-  }}
-  if (subRes.length) {{
-    const resi = subRes.join(',');
-    v.setStyle({{chain: 'B', resi: resi}}, {{
-      cartoon: {{color: '#FFD700'}},
-      stick:   {{color: '#FFD700', radius: 0.2}},
-    }});
-    v.addStyle({{chain: 'B', resi: resi}}, {{sphere: {{color: '#FFD700', radius: 0.8}}}});
-  }}
-
-  v.render();
+  // Start both viewers in the same orientation as the short structure
+  setTimeout(() => {{
+    const view = vShort.getView();
+    vLong.setView(view);
+    vLong.render();
+  }}, 100);
 }}
 
 function setColor(mode, btn) {{
   colorMode = mode;
   document.querySelectorAll('.cbtn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  applyStyle(vShort, SHORT, SHORT_SUB, []);
-  applyStyle(vLong,  LONG,  LONG_SUB,  LONG_INS);
+  applyStyle(vShort, SHORT_SUB, []);
+  applyStyle(vLong,  LONG_SUB,  LONG_INS);
 }}
 
 function toggleSync() {{
@@ -379,7 +401,7 @@ function toggleSync() {{
   btn.classList.toggle('on', syncOn);
 }}
 
-// Sync loop: if sync is on, mirror short → long
+// Poll-based sync: mirror short → long rotation
 let lastView = null;
 function syncLoop() {{
   if (syncOn && vShort && vLong && !syncing) {{
@@ -400,8 +422,8 @@ window.addEventListener('DOMContentLoaded', () => {{
   initViewers();
   syncLoop();
   window.addEventListener('resize', () => {{
-    if (vShort) vShort.resize();
-    if (vLong)  vLong.resize();
+    vShort && vShort.resize();
+    vLong  && vLong.resize();
   }});
 }});
 </script>
@@ -423,16 +445,15 @@ def main():
     long_ = load_best_model(zip_long)
     print(f"  {long_['name']}: chain B {long_['chain_b_len']} aa, ranking {long_['ranking_score']}")
 
+    print("Superimposing long onto short via chain A Kabsch alignment...")
+    long_["cif"] = kabsch_superimpose(short["cif"], long_["cif"])
+
     print("Computing sequence diff...")
     diff = compute_diff(short["seq_b"], long_["seq_b"])
-    ins  = [i for i, a in enumerate(diff["alt_annot"]) if i > 0 and a == "ins"]
-    sub  = [i for i, a in enumerate(diff["alt_annot"]) if i > 0 and a == "sub"]
-    print(f"  Long-only residues (ins): {ins}")
-    print(f"  Substitutions in long   : {sub}")
-    print(f"  Alignment preview:")
-    print(f"  Long : {diff['aln_alt'][:80]}")
-    print(f"         {diff['aln_mark'][:80]}")
-    print(f"  Short: {diff['aln_ref'][:80]}")
+    ins  = [i for i, a in enumerate(diff["long_annot"])  if i > 0 and a == "ins"]
+    sub  = [i for i, a in enumerate(diff["long_annot"])  if i > 0 and a == "sub"]
+    print(f"  Extra residues in long (chain B res): {ins}")
+    print(f"  Substitutions in long  (chain B res): {sub}")
 
     print("Generating HTML...")
     html = generate_html(short, long_, diff)
