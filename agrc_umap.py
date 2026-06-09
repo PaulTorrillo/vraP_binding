@@ -38,9 +38,15 @@ print(f"Loaded {len(embeddings)} embeddings, shape: {embeddings.shape}")
 print("agr group counts:\n", pd.Series(agr_labels).value_counts().to_string())
 print("cluster counts:\n", pd.Series(cluster_labels).value_counts().to_string())
 
-# ── PCA: fit and transform on all points ─────────────────────────────────────
+# ── PCA: fit and transform on assigned/clustered points only ─────────────────
+assigned_mask = assigned_flags == 1
 pca = PCA(n_components=2, random_state=42)
-coords = pca.fit_transform(embeddings)
+coords_all = pca.fit_transform(embeddings[assigned_mask])
+# subset all metadata arrays to assigned only
+coords        = coords_all
+agr_labels    = agr_labels[assigned_mask]
+cluster_labels = cluster_labels[assigned_mask]
+assigned_flags = assigned_flags[assigned_mask]
 var = pca.explained_variance_ratio_ * 100
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
@@ -95,12 +101,7 @@ ax.legend(title="agr group", frameon=True, fontsize=9)
 # ── Right panel: cluster assignment ──────────────────────────────────────────
 ax = axes[1]
 
-# Draw unassigned as faint grey background points first (all points plotted)
-unassigned_mask = assigned_flags == 0
-ax.scatter(coords[unassigned_mask, 0], coords[unassigned_mask, 1],
-           c="#DDDDDD", s=18, alpha=0.4, linewidths=0, zorder=1)
-
-# Draw assigned points coloured by cluster on top
+# Draw assigned points coloured by cluster
 for cluster_label in unique_clusters:
     mask = (cluster_labels == cluster_label) & (assigned_flags == 1)
     if mask.sum() == 0:
