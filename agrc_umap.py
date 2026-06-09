@@ -2,7 +2,7 @@ import os
 import torch
 import numpy as np
 import pandas as pd
-import umap
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 # ── Load agrC typing from supplementary table ─────────────────────────────────
@@ -38,9 +38,13 @@ print(f"Loaded {len(embeddings)} embeddings, shape: {embeddings.shape}")
 print("agr group counts:\n", pd.Series(agr_labels).value_counts().to_string())
 print("cluster counts:\n", pd.Series(cluster_labels).value_counts().to_string())
 
-# ── UMAP ──────────────────────────────────────────────────────────────────────
-reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
-coords = reducer.fit_transform(embeddings)
+# ── PCA: fit on assigned only, transform all ──────────────────────────────────
+assigned_mask = assigned_flags == 1
+pca = PCA(n_components=2, random_state=42)
+pca.fit(embeddings[assigned_mask])
+coords = pca.transform(embeddings)
+var = pca.explained_variance_ratio_ * 100
+print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
 # ── Colour palettes ───────────────────────────────────────────────────────────
 agr_colors = {
@@ -85,15 +89,15 @@ for group, color in agr_colors.items():
         continue
     ax.scatter(coords[mask, 0], coords[mask, 1],
                c=color, label=group, s=25, alpha=0.8, linewidths=0)
-ax.set_xlabel("UMAP 1")
-ax.set_ylabel("UMAP 2")
+ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
+ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
 ax.set_title("agrC embeddings — agr group")
 ax.legend(title="agr group", frameon=True, fontsize=9)
 
 # ── Right panel: cluster assignment ──────────────────────────────────────────
 ax = axes[1]
 
-# Draw unassigned as faint grey background points first
+# Draw unassigned as faint grey background points first (all points plotted)
 unassigned_mask = assigned_flags == 0
 ax.scatter(coords[unassigned_mask, 0], coords[unassigned_mask, 1],
            c="#DDDDDD", s=18, alpha=0.4, linewidths=0, zorder=1)
@@ -108,12 +112,12 @@ for cluster_label in unique_clusters:
     ax.scatter(coords[mask, 0], coords[mask, 1],
                c=color, label=short, s=30, alpha=0.85, linewidths=0, zorder=2)
 
-ax.set_xlabel("UMAP 1")
-ax.set_ylabel("UMAP 2")
+ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
+ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
 ax.set_title("agrC embeddings — cluster assignment")
 ax.legend(title="Cluster", frameon=True, fontsize=7, loc="best",
           handlelength=1.2, borderpad=0.8)
 
 plt.tight_layout()
-plt.savefig("agrc_umap.png", dpi=150)
-print("Saved agrc_umap.png")
+plt.savefig("agrc_pca.png", dpi=150)
+print("Saved agrc_pca.png")
