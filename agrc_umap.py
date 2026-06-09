@@ -38,11 +38,9 @@ print(f"Loaded {len(embeddings)} embeddings, shape: {embeddings.shape}")
 print("agr group counts:\n", pd.Series(agr_labels).value_counts().to_string())
 print("cluster counts:\n", pd.Series(cluster_labels).value_counts().to_string())
 
-# ── PCA: fit on assigned only, transform all ──────────────────────────────────
-assigned_mask = assigned_flags == 1
+# ── PCA: fit and transform on all points ─────────────────────────────────────
 pca = PCA(n_components=2, random_state=42)
-pca.fit(embeddings[assigned_mask])
-coords = pca.transform(embeddings)
+coords = pca.fit_transform(embeddings)
 var = pca.explained_variance_ratio_ * 100
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
