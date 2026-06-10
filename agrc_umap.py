@@ -88,18 +88,17 @@ agr_fl       = agr_labels[fl_mask]
 print(f"PCA (full-length):  PC1: {var_fl[0]:.1f}%  PC2: {var_fl[1]:.1f}%")
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-# GMM panel uses purple/brown — no overlap with agr group palette
+# Tableau 10 split across panels — zero color overlap, publication-ready
 gmm_colors = {
-    "full-length": "#9467BD",   # purple
-    "truncated":   "#8C564B",   # brown
+    "full-length": "#4E79A7",   # steel blue
+    "truncated":   "#F28E2B",   # amber orange
 }
-# agr group panel uses red/blue/green/orange/grey
 agr_colors = {
-    "gp1":     "#E41A1C",
-    "gp2":     "#377EB8",
-    "gp3":     "#4DAF4A",
-    "gp4":     "#FF7F00",
-    "unknown": "#999999",
+    "gp1":     "#E15759",   # coral red
+    "gp2":     "#76B7B2",   # teal
+    "gp3":     "#59A14F",   # green
+    "gp4":     "#B07AA1",   # muted purple
+    "unknown": "#BAB0AC",   # warm grey
 }
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 5))
