@@ -88,6 +88,12 @@ agr_fl       = agr_labels[fl_mask]
 print(f"PCA (full-length):  PC1: {var_fl[0]:.1f}%  PC2: {var_fl[1]:.1f}%")
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
+# GMM panel uses purple/brown — no overlap with agr group palette
+gmm_colors = {
+    "full-length": "#9467BD",   # purple
+    "truncated":   "#8C564B",   # brown
+}
+# agr group panel uses red/blue/green/orange/grey
 agr_colors = {
     "gp1":     "#E41A1C",
     "gp2":     "#377EB8",
@@ -96,13 +102,13 @@ agr_colors = {
     "unknown": "#999999",
 }
 
-fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+fig, axes = plt.subplots(1, 2, figsize=(11, 5))
 
 # ── Left panel: all embeddings, colored by GMM population ────────────────────
 ax = axes[0]
 groups = [
-    (full_length_component,     "full-length", "#377EB8", 25, 0.8),
-    (1 - full_length_component, "truncated",   "#E41A1C", 40, 0.9),
+    (full_length_component,     "full-length", gmm_colors["full-length"], 25, 0.8),
+    (1 - full_length_component, "truncated",   gmm_colors["truncated"],   40, 0.9),
 ]
 for comp, label, color, size, alpha in groups:
     mask = gmm_labels == comp
