@@ -68,33 +68,72 @@ embeddings = np.array(embeddings)
 gmm_labels = np.array(gmm_labels)
 print(f"\nTotal embeddings loaded: {len(embeddings)}")
 
+# ── Load agrC typing for right panel ─────────────────────────────────────────
+df_meta   = pd.read_excel("DatasetS1.xlsx", sheet_name="TableS3")
+acc_to_agr = dict(zip(df_meta["Accession"], df_meta["agr group"]))
+agr_labels = np.array([acc_to_agr.get(f.split("_")[0], "unknown") for f in basenames])
+
 # ── PCA on all embeddings ─────────────────────────────────────────────────────
-pca    = PCA(n_components=2, random_state=42)
-coords = pca.fit_transform(embeddings)
-var    = pca.explained_variance_ratio_ * 100
-print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
+pca_all  = PCA(n_components=2, random_state=42)
+coords_all = pca_all.fit_transform(embeddings)
+var_all    = pca_all.explained_variance_ratio_ * 100
+print(f"PCA (all):          PC1: {var_all[0]:.1f}%  PC2: {var_all[1]:.1f}%")
+
+# ── PCA on full-length embeddings only ───────────────────────────────────────
+fl_mask      = gmm_labels == full_length_component
+pca_fl       = PCA(n_components=2, random_state=42)
+coords_fl    = pca_fl.fit_transform(embeddings[fl_mask])
+var_fl       = pca_fl.explained_variance_ratio_ * 100
+agr_fl       = agr_labels[fl_mask]
+print(f"PCA (full-length):  PC1: {var_fl[0]:.1f}%  PC2: {var_fl[1]:.1f}%")
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(8, 6))
+agr_colors = {
+    "gp1":     "#E41A1C",
+    "gp2":     "#377EB8",
+    "gp3":     "#4DAF4A",
+    "gp4":     "#FF7F00",
+    "unknown": "#999999",
+}
 
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+# ── Left panel: all embeddings, colored by GMM population ────────────────────
+ax = axes[0]
 groups = [
-    (full_length_component, "full-length", "#377EB8", 25, 0.8),
-    (1 - full_length_component, "truncated",    "#E41A1C", 40, 0.9),
+    (full_length_component,     "full-length", "#377EB8", 25, 0.8),
+    (1 - full_length_component, "truncated",   "#E41A1C", 40, 0.9),
 ]
 for comp, label, color, size, alpha in groups:
     mask = gmm_labels == comp
-    c    = full_length_component if label == "full-length" else 1 - full_length_component
+    c    = comp
     legend_label = (f"{label} (n={mask.sum()}, "
                     f"μ={component_means[c]:.1f} aa, "
                     f"σ={component_stds[c]:.1f} aa)")
-    ax.scatter(coords[mask, 0], coords[mask, 1],
-               c=color, label=legend_label,
-               s=size, alpha=alpha, linewidths=0)
+    ax.scatter(coords_all[mask, 0], coords_all[mask, 1],
+               c=color, label=legend_label, s=size, alpha=alpha, linewidths=0)
 
-ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
-ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
-ax.set_title("agrC embeddings — Gaussian Mixture Model length classification")
-ax.legend(title="Population", frameon=True, fontsize=9, loc="upper left")
+ymin, ymax = ax.get_ylim()
+ax.set_ylim(ymin, ymax + 0.18 * (ymax - ymin))
+ax.set_xlabel(f"PC1 — all ({var_all[0]:.1f}%)")
+ax.set_ylabel(f"PC2 — all ({var_all[1]:.1f}%)")
+ax.set_title("Gaussian Mixture Model length classification")
+ax.legend(title="Population", frameon=True, fontsize=8, loc="upper left")
+
+# ── Right panel: full-length only, colored by agr group ──────────────────────
+ax = axes[1]
+for group, color in agr_colors.items():
+    mask = agr_fl == group
+    if mask.sum() == 0:
+        continue
+    ax.scatter(coords_fl[mask, 0], coords_fl[mask, 1],
+               c=color, label=f"{group} (n={mask.sum()})",
+               s=25, alpha=0.8, linewidths=0)
+
+ax.set_xlabel(f"PC1 — full-length ({var_fl[0]:.1f}%)")
+ax.set_ylabel(f"PC2 — full-length ({var_fl[1]:.1f}%)")
+ax.set_title("Full-length embeddings — agr group")
+ax.legend(title="agr group", frameon=True, fontsize=8, loc="best")
 plt.tight_layout()
 plt.savefig("agrc_pca.png", dpi=150)
 print("Saved agrc_pca.png")
