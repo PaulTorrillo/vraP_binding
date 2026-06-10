@@ -74,14 +74,14 @@ acc_to_agr = dict(zip(df_meta["Accession"], df_meta["agr group"]))
 agr_labels = np.array([acc_to_agr.get(f.split("_")[0], "unknown") for f in basenames])
 
 # ── PCA on all embeddings ─────────────────────────────────────────────────────
-pca_all  = PCA(n_components=2, random_state=42)
+pca_all  = PCA(n_components=3, random_state=42)
 coords_all = pca_all.fit_transform(embeddings)
 var_all    = pca_all.explained_variance_ratio_ * 100
 print(f"PCA (all):          PC1: {var_all[0]:.1f}%  PC2: {var_all[1]:.1f}%")
 
 # ── PCA on full-length embeddings only ───────────────────────────────────────
 fl_mask      = gmm_labels == full_length_component
-pca_fl       = PCA(n_components=2, random_state=42)
+pca_fl       = PCA(n_components=3, random_state=42)
 coords_fl    = pca_fl.fit_transform(embeddings[fl_mask])
 var_fl       = pca_fl.explained_variance_ratio_ * 100
 agr_fl       = agr_labels[fl_mask]
@@ -115,13 +115,13 @@ for comp, label, color, size, alpha in groups:
     legend_label = (f"{label} (n={mask.sum()}, "
                     f"μ={component_means[c]:.1f} aa, "
                     f"σ={component_stds[c]:.1f} aa)")
-    ax.scatter(coords_all[mask, 0], coords_all[mask, 1],
+    ax.scatter(coords_all[mask, 1], coords_all[mask, 2],
                c=color, label=legend_label, s=size, alpha=alpha, linewidths=0)
 
 ymin, ymax = ax.get_ylim()
 ax.set_ylim(ymin, ymax + 0.18 * (ymax - ymin))
-ax.set_xlabel(f"PC1 — all ({var_all[0]:.1f}%)")
-ax.set_ylabel(f"PC2 — all ({var_all[1]:.1f}%)")
+ax.set_xlabel(f"PC2 — all ({var_all[1]:.1f}%)")
+ax.set_ylabel(f"PC3 — all ({var_all[2]:.1f}%)")
 ax.set_title("Gaussian Mixture Model length classification")
 ax.legend(title="Population", frameon=True, fontsize=8, loc="upper left")
 
@@ -131,12 +131,12 @@ for group, color in agr_colors.items():
     mask = agr_fl == group
     if mask.sum() == 0:
         continue
-    ax.scatter(coords_fl[mask, 0], coords_fl[mask, 1],
+    ax.scatter(coords_fl[mask, 1], coords_fl[mask, 2],
                c=color, label=f"{group} (n={mask.sum()})",
                s=25, alpha=0.8, linewidths=0)
 
-ax.set_xlabel(f"PC1 — full-length ({var_fl[0]:.1f}%)")
-ax.set_ylabel(f"PC2 — full-length ({var_fl[1]:.1f}%)")
+ax.set_xlabel(f"PC2 — full-length ({var_fl[1]:.1f}%)")
+ax.set_ylabel(f"PC3 — full-length ({var_fl[2]:.1f}%)")
 ax.set_title("Full-length embeddings — agr group")
 ax.legend(title="agr group", frameon=True, fontsize=8, loc="best")
 plt.tight_layout()
