@@ -101,7 +101,7 @@ agr_colors = {
     "unknown": "#BAB0AC",   # warm grey
 }
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 
 # ── Left panel: all embeddings, colored by GMM population ────────────────────
 ax = axes[0]
