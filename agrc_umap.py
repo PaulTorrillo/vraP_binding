@@ -24,7 +24,7 @@ with open("final_genes.faa") as fh:
 lengths = np.array(list(seq_lengths.values()))
 mean_len = lengths.mean()
 std_len  = lengths.std()
-cutoff   = mean_len - 3 * std_len
+cutoff   = mean_len - 2 * std_len
 kept     = {k: v for k, v in seq_lengths.items() if v >= cutoff}
 removed  = len(seq_lengths) - len(kept)
 
@@ -82,7 +82,7 @@ for group, color in agr_colors.items():
 
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
-ax.set_title("agrC embeddings — agr group (length-filtered)")
+ax.set_title("agrC embeddings — agr group (length-filtered, 2-SD cutoff)")
 ax.legend(title="agr group", frameon=True, fontsize=9)
 plt.tight_layout()
 plt.savefig("agrc_pca.png", dpi=150)
