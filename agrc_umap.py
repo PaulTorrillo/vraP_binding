@@ -83,14 +83,18 @@ groups = [
 ]
 for comp, label, color, size, alpha in groups:
     mask = gmm_labels == comp
+    c    = full_length_component if label == "full-length" else 1 - full_length_component
+    legend_label = (f"{label} (n={mask.sum()}, "
+                    f"μ={component_means[c]:.1f} aa, "
+                    f"σ={component_stds[c]:.1f} aa)")
     ax.scatter(coords[mask, 0], coords[mask, 1],
-               c=color, label=f"{label} (n={mask.sum()})",
+               c=color, label=legend_label,
                s=size, alpha=alpha, linewidths=0)
 
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
-ax.set_title("agrC embeddings — GMM length classification")
-ax.legend(title="Population", frameon=True, fontsize=9)
+ax.set_title("agrC embeddings — Gaussian Mixture Model length classification")
+ax.legend(title="Population", frameon=True, fontsize=9, loc="upper left")
 plt.tight_layout()
 plt.savefig("agrc_pca.png", dpi=150)
 print("Saved agrc_pca.png")
