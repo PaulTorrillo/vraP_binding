@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 
 # ── Parse sequences from FASTA ────────────────────────────────────────────────
@@ -22,15 +23,33 @@ with open("final_genes.faa") as fh:
         seq_lengths[name] = len("".join(seq))
 
 lengths = np.array(list(seq_lengths.values()))
-mean_len = lengths.mean()
-std_len  = lengths.std()
-cutoff   = mean_len * 0.90
-kept     = {k: v for k, v in seq_lengths.items() if v >= cutoff}
-removed  = len(seq_lengths) - len(kept)
+mean_len   = lengths.mean()
+std_len    = lengths.std()
+median_len = np.median(lengths)
 
-print(f"Sequence length  mean: {mean_len:.1f}  std: {std_len:.1f}")
-print(f"3-SD lower cutoff: {cutoff:.1f} aa")
-print(f"Total sequences: {len(seq_lengths)}  kept: {len(kept)}  removed (<cutoff): {removed}")
+# Fit a 2-component GMM to separate the full-length cluster from truncated sequences.
+# IQR/MAD collapse to zero here because 357/385 sequences are exactly 427 or 430 aa,
+# making threshold-based methods degenerate. GMM models both populations directly and
+# assigns each sequence to the component whose mean is higher (full-length cluster).
+gmm = GaussianMixture(n_components=2, random_state=42)
+gmm.fit(lengths.reshape(-1, 1))
+component_labels = gmm.predict(lengths.reshape(-1, 1))
+full_length_component = int(np.argmax(gmm.means_))
+component_means = gmm.means_.flatten()
+component_stds  = np.sqrt(gmm.covariances_).flatten()
+
+names = list(seq_lengths.keys())
+kept    = {names[i]: lengths[i] for i in range(len(names))
+           if component_labels[i] == full_length_component}
+removed = len(seq_lengths) - len(kept)
+
+print(f"Sequence length  mean: {mean_len:.1f}  median: {median_len:.1f}  std: {std_len:.1f}")
+print(f"\nGMM components:")
+for c in range(2):
+    tag = "full-length (kept)" if c == full_length_component else "truncated (removed)"
+    print(f"  Component {c} [{tag}]: mean={component_means[c]:.1f} aa, "
+          f"std={component_stds[c]:.1f} aa, n={int((component_labels==c).sum())}")
+print(f"\nTotal: {len(seq_lengths)}  kept: {len(kept)}  removed: {removed}")
 
 # ── Load agrC typing ──────────────────────────────────────────────────────────
 df_meta = pd.read_excel("DatasetS1.xlsx", sheet_name="TableS3")
@@ -82,7 +101,7 @@ for group, color in agr_colors.items():
 
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
-ax.set_title("agrC embeddings — agr group (length ≥ 90% of mean)")
+ax.set_title("agrC embeddings — agr group (GMM length filter)")
 ax.legend(title="agr group", frameon=True, fontsize=9)
 plt.tight_layout()
 plt.savefig("agrc_pca.png", dpi=150)
