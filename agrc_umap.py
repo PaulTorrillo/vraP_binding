@@ -3,9 +3,10 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 
-# ── Parse sequences from FASTA ────────────────────────────────────────────────
+# ── Parse sequence lengths from FASTA ────────────────────────────────────────
 seq_lengths = {}
 with open("final_genes.faa") as fh:
     name, seq = None, []
@@ -21,71 +22,75 @@ with open("final_genes.faa") as fh:
     if name:
         seq_lengths[name] = len("".join(seq))
 
-lengths = np.array(list(seq_lengths.values()))
+lengths    = np.array(list(seq_lengths.values()))
+names      = list(seq_lengths.keys())
 mean_len   = lengths.mean()
 std_len    = lengths.std()
 median_len = np.median(lengths)
 
-cutoff  = median_len * 0.90
-kept    = {k: v for k, v in seq_lengths.items() if v >= cutoff}
-removed = len(seq_lengths) - len(kept)
+# ── GMM: identify full-length vs truncated populations ───────────────────────
+gmm = GaussianMixture(n_components=2, random_state=42)
+gmm.fit(lengths.reshape(-1, 1))
+component_labels      = gmm.predict(lengths.reshape(-1, 1))
+full_length_component = int(np.argmax(gmm.means_))
+component_means       = gmm.means_.flatten()
+component_stds        = np.sqrt(gmm.covariances_).flatten()
+
+n_full     = int((component_labels == full_length_component).sum())
+n_truncated = int((component_labels != full_length_component).sum())
 
 print(f"Sequence length  mean: {mean_len:.1f}  median: {median_len:.1f}  std: {std_len:.1f}")
-print(f"90% of median cutoff: {cutoff:.1f} aa")
-print(f"Total: {len(seq_lengths)}  kept: {len(kept)}  removed (<cutoff): {removed}")
+print(f"\nGMM components:")
+for c in range(2):
+    tag = "full-length" if c == full_length_component else "truncated"
+    print(f"  [{tag}]: mean={component_means[c]:.1f} aa, "
+          f"std={component_stds[c]:.1f} aa, n={int((component_labels==c).sum())}")
 
-# ── Load agrC typing ──────────────────────────────────────────────────────────
-df_meta = pd.read_excel("DatasetS1.xlsx", sheet_name="TableS3")
-acc_to_agr = dict(zip(df_meta["Accession"], df_meta["agr group"]))
+# Map each sequence name to its GMM label
+name_to_gmm = {names[i]: component_labels[i] for i in range(len(names))}
 
-# ── Load embeddings for sequences passing the length filter ──────────────────
+# ── Load ALL embeddings ───────────────────────────────────────────────────────
 pt_dir = "agrC_fresh"
-embeddings, agr_labels, basenames = [], [], []
+embeddings, gmm_labels, basenames = [], [], []
 
 for fname in sorted(os.listdir(pt_dir)):
     if not fname.endswith(".pt"):
         continue
-    label = fname[:-3]          # strip .pt → matches FASTA header
-    if label not in kept:
+    label = fname[:-3]
+    if label not in name_to_gmm:
         continue
-    accession = fname.split("_")[0]
     data = torch.load(os.path.join(pt_dir, fname), map_location="cpu")
     embeddings.append(data["mean_representations"][6].numpy())
-    agr_labels.append(acc_to_agr.get(accession, "unknown"))
+    gmm_labels.append(name_to_gmm[label])
     basenames.append(fname)
 
 embeddings = np.array(embeddings)
-agr_labels = np.array(agr_labels)
-print(f"\nEmbeddings loaded for length-filtered set: {len(embeddings)}")
-print("agr group counts:\n", pd.Series(agr_labels).value_counts().to_string())
+gmm_labels = np.array(gmm_labels)
+print(f"\nTotal embeddings loaded: {len(embeddings)}")
 
-# ── PCA on all length-filtered sequences ─────────────────────────────────────
+# ── PCA on all embeddings ─────────────────────────────────────────────────────
 pca    = PCA(n_components=2, random_state=42)
 coords = pca.fit_transform(embeddings)
 var    = pca.explained_variance_ratio_ * 100
-print(f"\nPC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
+print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-agr_colors = {
-    "gp1":     "#E41A1C",
-    "gp2":     "#377EB8",
-    "gp3":     "#4DAF4A",
-    "gp4":     "#FF7F00",
-    "unknown": "#999999",
-}
-
 fig, ax = plt.subplots(figsize=(8, 6))
-for group, color in agr_colors.items():
-    mask = agr_labels == group
-    if mask.sum() == 0:
-        continue
+
+groups = [
+    (full_length_component, "full-length", "#377EB8", 25, 0.8),
+    (1 - full_length_component, "truncated",    "#E41A1C", 40, 0.9),
+]
+for comp, label, color, size, alpha in groups:
+    mask = gmm_labels == comp
     ax.scatter(coords[mask, 0], coords[mask, 1],
-               c=color, label=group, s=25, alpha=0.8, linewidths=0)
+               c=color, label=f"{label} (n={mask.sum()})",
+               s=size, alpha=alpha, linewidths=0)
 
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
-ax.set_title("agrC embeddings — agr group (length ≥ 90% of median)")
-ax.legend(title="agr group", frameon=True, fontsize=9)
+ax.set_title("agrC embeddings — GMM length classification")
+ax.legend(title="Population", frameon=True, fontsize=9)
 plt.tight_layout()
 plt.savefig("agrc_pca.png", dpi=150)
 print("Saved agrc_pca.png")
