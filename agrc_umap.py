@@ -77,8 +77,8 @@ df_pts["pc1"] = coords[:, 0]
 df_pts["pc2"] = coords[:, 1]
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
-xlim = (-0.2, 0.2)
-ylim = (-0.2, 0.2)
+xlim = (-1, 1)
+ylim = (-1, 1)
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
 p1_colors = {
@@ -124,7 +124,7 @@ ax.legend(title="Group", frameon=True, fontsize=7.5, loc="best",
 ax = axes[1]
 unc = df_pts[df_pts["locus_tag"] == "unclustered"]
 ax.scatter(unc["pc1"], unc["pc2"],
-           c="#D3D3D3", s=15, alpha=0.5, linewidths=0,
+           c="black", s=15, alpha=0.6, linewidths=0,
            label=f"unclustered  n={len(unc)}", zorder=1)
 
 for locus in unique_loci:
