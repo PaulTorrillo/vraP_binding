@@ -77,14 +77,8 @@ df_pts["pc1"] = coords[:, 0]
 df_pts["pc2"] = coords[:, 1]
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
-# ── Robust axis limits (2nd–98th percentile + 5% padding) ────────────────────
-def robust_lims(vals, lo=2, hi=98, pad=0.05):
-    lo_v, hi_v = np.percentile(vals, [lo, hi])
-    span = hi_v - lo_v
-    return lo_v - pad * span, hi_v + pad * span
-
-xlim = robust_lims(coords[:, 0])
-ylim = robust_lims(coords[:, 1])
+xlim = (-0.2, 0.2)
+ylim = (-0.2, 0.2)
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
 p1_colors = {
