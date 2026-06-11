@@ -131,7 +131,13 @@ ax.set_xlim(*xlim);  ax.set_ylim(*ylim)
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
 ax.set_title("agrC embeddings — agr group / truncated")
-ax.legend(title="Group", frameon=True, fontsize=7.5, loc="best",
+# reorder legend without changing z-order
+p1_order = ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]
+h, l = ax.get_legend_handles_labels()
+label_to_handle = dict(zip([x.split()[0] for x in l], h))
+h_ord = [label_to_handle[g] for g in p1_order if g in label_to_handle]
+l_ord = [lbl for g in p1_order for lbl in l if lbl.startswith(g + " ")]
+ax.legend(h_ord, l_ord, title="Group", frameon=True, fontsize=7.5, loc="best",
           handlelength=1, borderpad=0.7)
 
 # ── Panel 2: cluster locus tag / unclustered ──────────────────────────────────
@@ -155,7 +161,18 @@ ax.set_xlim(*xlim);  ax.set_ylim(*ylim)
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
 ax.set_title("agrC embeddings — cluster (locus tag)")
-ax.legend(title="Cluster", frameon=True, fontsize=7, loc="best",
+# reorder legend: FEOBHI_09345, HCCNHA_05915, GFNPHG_09685, others, unclustered
+p2_priority = ["FEOBHI_09345", "HCCNHA_05915", "GFNPHG_09685"]
+h, l = ax.get_legend_handles_labels()
+remaining = [lbl for lbl in l
+             if not any(lbl.startswith(p) for p in p2_priority)
+             and not lbl.startswith("unclustered")]
+unc_entry  = [lbl for lbl in l if lbl.startswith("unclustered")]
+l_ord = ([lbl for p in p2_priority for lbl in l if lbl.startswith(p)]
+         + remaining + unc_entry)
+lbl_to_h = dict(zip(l, h))
+h_ord = [lbl_to_h[lbl] for lbl in l_ord]
+ax.legend(h_ord, l_ord, title="Cluster", frameon=True, fontsize=7, loc="best",
           handlelength=1, borderpad=0.7)
 
 plt.tight_layout()
