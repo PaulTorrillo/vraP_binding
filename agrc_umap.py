@@ -89,7 +89,7 @@ ylim = (-3, 3)
 
 p1_colors = {
     "gp1":       "#4393C3",   # cornflower blue   (blue family)
-    "gp4":       "#08519C",   # vivid royal blue  (blue family, clearly distinct from grey)
+    "gp4":       "#6A3D9A",   # vivid purple
     "gp3":       "#D6604D",   # brick red         (red family)
     "gp2":       "#91CF60",   # lime green        (green family)
     "unknown":   "#CC7722",   # warm ochre        (clearly distinct from all greys and blues)
