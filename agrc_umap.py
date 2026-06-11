@@ -77,8 +77,8 @@ df_pts["pc1"] = coords[:, 0]
 df_pts["pc2"] = coords[:, 1]
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
-xlim = (-2, 2)
-ylim = (-2, 2)
+xlim = (-3, 3)
+ylim = (-3, 3)
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
 p1_colors = {
