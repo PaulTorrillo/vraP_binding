@@ -81,29 +81,41 @@ xlim = (-3, 3)
 ylim = (-3, 3)
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
+# ── Colour maps ───────────────────────────────────────────────────────────────
+# Blue family  → FEOBHI_09345 (main AgrC) / gp1 / gp4
+# Red family   → GFNPHG_09685 (AgrC HK)  / gp3
+# Green family → HCCNHA_05915 (YesM)     / gp2
+# Dark grey    → truncated / unclustered / unknown
+
 p1_colors = {
-    "gp1":       "#E15759",
-    "gp2":       "#76B7B2",
-    "gp3":       "#59A14F",
-    "gp4":       "#B07AA1",
-    "unknown":   "#BAB0AC",
-    "truncated": "#F28E2B",
+    "gp1":       "#4393C3",   # cornflower blue   (blue family)
+    "gp4":       "#2166AC",   # dark blue         (blue family)
+    "gp3":       "#D6604D",   # brick red         (red family)
+    "gp2":       "#91CF60",   # lime green        (green family)
+    "unknown":   "#969696",   # medium grey
+    "truncated": "#525252",   # dark grey
 }
 
-cluster_palette = [
-    "#4E79A7", "#E15759", "#59A14F", "#F28E2B",
-    "#B07AA1", "#76B7B2", "#EDC948", "#FF9DA7",
-]
+locus_color = {
+    "FEOBHI_09345": "#6BAED6",   # light blue        (blue family — main AgrC)
+    "GFNPHG_09685": "#F4A582",   # salmon            (red family  — AgrC HK)
+    "HCCNHA_05915": "#1A9850",   # forest green      (green family — YesM)
+    "FEOBHI_10025": "#762A83",   # purple            (other)
+    "FEOBHI_00575": "#E7298A",   # hot pink          (other)
+    "FEOBHI_06835": "#A65628",   # brown             (other)
+    "FEOBHI_12555": "#FF7F00",   # amber             (other)
+    "MDBBCG_11375": "#E6AB02",   # golden yellow     (other)
+}
 unique_loci = sorted(df_pts.loc[df_pts["locus_tag"] != "unclustered", "locus_tag"].unique())
-locus_color = {loc: cluster_palette[i % len(cluster_palette)]
-               for i, loc in enumerate(unique_loci)}
 
 # ── Figure ────────────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
 # ── Panel 1: agr group / truncated ───────────────────────────────────────────
 ax = axes[0]
-for group in ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]:
+# background groups first (low z-order)
+for group, zord in [("truncated", 1), ("unknown", 1),
+                    ("gp1", 2), ("gp2", 2), ("gp3", 2), ("gp4", 2)]:
     sub = df_pts[df_pts["p1_group"] == group]
     if sub.empty:
         continue
@@ -111,7 +123,7 @@ for group in ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]:
     lbl = f"{group}  n={len(sub)}, {lo}–{hi} aa"
     ax.scatter(sub["pc1"], sub["pc2"],
                c=p1_colors[group], label=lbl,
-               s=20, alpha=0.8, linewidths=0, zorder=2)
+               s=20, alpha=0.8, linewidths=0, zorder=zord)
 
 ax.set_xscale("symlog", linthresh=0.2)
 ax.set_yscale("symlog", linthresh=0.2)
@@ -126,7 +138,7 @@ ax.legend(title="Group", frameon=True, fontsize=7.5, loc="best",
 ax = axes[1]
 unc = df_pts[df_pts["locus_tag"] == "unclustered"]
 ax.scatter(unc["pc1"], unc["pc2"],
-           c="black", s=15, alpha=0.6, linewidths=0,
+           c="#525252", s=15, alpha=0.6, linewidths=0,
            label=f"unclustered  n={len(unc)}", zorder=1)
 
 for locus in unique_loci:
@@ -134,7 +146,7 @@ for locus in unique_loci:
     lo, hi = int(sub["length"].min()), int(sub["length"].max())
     lbl = f"{locus}  n={len(sub)}, {lo}–{hi} aa"
     ax.scatter(sub["pc1"], sub["pc2"],
-               c=locus_color[locus], label=lbl,
+               c=locus_color.get(locus, "#AAAAAA"), label=lbl,
                s=20, alpha=0.85, linewidths=0, zorder=2)
 
 ax.set_xscale("symlog", linthresh=0.2)
