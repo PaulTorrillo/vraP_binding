@@ -38,8 +38,9 @@ ax.hist(assigned_lengths, bins=bins, color="#4E79A7", alpha=0.85,
 ax.hist(unassigned_lengths, bins=bins, color="#F28E2B", alpha=0.85,
         label=f"unassigned (n={len(unassigned_lengths)})", zorder=3)
 
+ax.set_yscale("log")
 ax.set_xlabel("Sequence length (aa)")
-ax.set_ylabel("Count")
+ax.set_ylabel("Count (log scale)")
 ax.set_title("agrC sequence length distribution — cluster assignment")
 ax.set_xlim(0, 460)
 ax.legend(frameon=True, fontsize=9, loc="upper left")
