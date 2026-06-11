@@ -77,8 +77,8 @@ df_pts["pc1"] = coords[:, 0]
 df_pts["pc2"] = coords[:, 1]
 print(f"PC1: {var[0]:.1f}%  PC2: {var[1]:.1f}%")
 
-xlim = (-1, 1)
-ylim = (-1, 1)
+xlim = (-1.8, 2.2)
+ylim = (-1.7, 0.4)
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
 p1_colors = {
@@ -113,6 +113,8 @@ for group in ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]:
                c=p1_colors[group], label=lbl,
                s=20, alpha=0.8, linewidths=0, zorder=2)
 
+ax.set_xscale("symlog", linthresh=0.2)
+ax.set_yscale("symlog", linthresh=0.2)
 ax.set_xlim(*xlim);  ax.set_ylim(*ylim)
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
@@ -135,6 +137,8 @@ for locus in unique_loci:
                c=locus_color[locus], label=lbl,
                s=20, alpha=0.85, linewidths=0, zorder=2)
 
+ax.set_xscale("symlog", linthresh=0.2)
+ax.set_yscale("symlog", linthresh=0.2)
 ax.set_xlim(*xlim);  ax.set_ylim(*ylim)
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
