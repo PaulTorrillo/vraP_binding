@@ -29,14 +29,14 @@ assigned_lengths   = np.array([seq_lengths[n] for n in seq_lengths if n in assig
 unassigned_lengths = np.array([seq_lengths[n] for n in seq_lengths if n in unassigned_names])
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-bins = np.linspace(0, 460, 47)
+bins = np.arange(0, 462, 1)
 
 fig, ax = plt.subplots(figsize=(10, 4))
 
-ax.hist([assigned_lengths, unassigned_lengths], bins=bins,
-        color=["#4E79A7", "#F28E2B"], alpha=0.85, stacked=True,
-        label=[f"assigned (n={len(assigned_lengths)})",
-               f"unassigned (n={len(unassigned_lengths)})"])
+ax.hist(assigned_lengths, bins=bins, color="#4E79A7", alpha=0.85,
+        label=f"assigned (n={len(assigned_lengths)})")
+ax.hist(unassigned_lengths, bins=bins, color="#F28E2B", alpha=0.85,
+        label=f"unassigned (n={len(unassigned_lengths)})")
 
 ax.set_yscale("log")
 ax.set_xlabel("Sequence length (aa)")
