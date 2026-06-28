@@ -5,6 +5,17 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+mpl.rcParams.update({
+    "font.size":        13,
+    "axes.titlesize":   14,
+    "axes.labelsize":   13,
+    "xtick.labelsize":  11,
+    "ytick.labelsize":  11,
+    "legend.fontsize":   9,
+    "legend.title_fontsize": 10,
+})
 
 # ── Parse sequence lengths from FASTA ────────────────────────────────────────
 seq_lengths = {}
@@ -137,7 +148,7 @@ h, l = ax.get_legend_handles_labels()
 label_to_handle = dict(zip([x.split()[0] for x in l], h))
 h_ord = [label_to_handle[g] for g in p1_order if g in label_to_handle]
 l_ord = [lbl for g in p1_order for lbl in l if lbl.startswith(g + " ")]
-ax.legend(h_ord, l_ord, title="Group", frameon=True, fontsize=7.5, loc="best",
+ax.legend(h_ord, l_ord, title="Group", frameon=True, loc="best",
           handlelength=1, borderpad=0.7)
 
 # ── Panel 2: cluster locus tag / unclustered ──────────────────────────────────
@@ -172,7 +183,7 @@ l_ord = ([lbl for p in p2_priority for lbl in l if lbl.startswith(p)]
          + remaining + unc_entry)
 lbl_to_h = dict(zip(l, h))
 h_ord = [lbl_to_h[lbl] for lbl in l_ord]
-ax.legend(h_ord, l_ord, title="Cluster", frameon=True, fontsize=7, loc="best",
+ax.legend(h_ord, l_ord, title="Cluster", frameon=True, loc="best",
           handlelength=1, borderpad=0.7)
 
 plt.tight_layout()
