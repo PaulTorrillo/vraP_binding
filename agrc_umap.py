@@ -8,11 +8,13 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 mpl.rcParams.update({
-    "font.size":        13,
-    "axes.titlesize":   14,
-    "axes.labelsize":   13,
-    "xtick.labelsize":  11,
-    "ytick.labelsize":  11,
+    "font.family":      "sans-serif",
+    "font.sans-serif":  ["Arial", "Liberation Sans"],
+    "font.size":        15,
+    "axes.titlesize":   17,
+    "axes.labelsize":   16,
+    "xtick.labelsize":  14,
+    "ytick.labelsize":  14,
     "legend.fontsize":   9,
     "legend.title_fontsize": 10,
 })
