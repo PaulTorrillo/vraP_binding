@@ -119,7 +119,7 @@ cluster_markers = {
 }
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(9, 6))
+fig, ax = plt.subplots(figsize=(11, 6))
 fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 
 agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]
@@ -144,6 +144,8 @@ for agr in agr_order:
                    edgecolors="none" if clust != "unclustered" else p1_colors[agr],
                    zorder=zord)
 
+ax.set_xscale("symlog", linthresh=0.2)
+ax.set_yscale("symlog", linthresh=0.2)
 ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 ax.set_xlabel(f"PC1 ({var[0]:.1f}%)")
 ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
