@@ -138,7 +138,7 @@ for agr in agr_order:
         ax.scatter(subsub["pc1"], subsub["pc2"],
                    c=p1_colors[agr],
                    marker=cluster_markers[clust],
-                   s=55, alpha=0.5,
+                   s=55, alpha=0.75,
                    linewidths=1.8 if clust == "unclustered" else 0.8,
                    edgecolors=p1_colors[agr] if clust == "unclustered" else "#222222",
                    zorder=zord)
