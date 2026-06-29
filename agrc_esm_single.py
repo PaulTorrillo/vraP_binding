@@ -109,7 +109,7 @@ p1_colors = {
     "gp3":       "#D6604D",
     "gp4":       "#6A3D9A",
     "unknown":   "#CC7722",
-    "truncated": "#525252",
+    "truncated": "black",
 }
 cluster_markers = {
     "ESM-2 cluster 1": "o",
