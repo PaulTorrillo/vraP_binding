@@ -153,10 +153,14 @@ ax.set_ylabel(f"PC2 ({var[1]:.1f}%)")
 ax.set_title("agrC ESM-2 embeddings — PCA")
 
 # ── Legend 1: agr group (colors) ─────────────────────────────────────────────
-color_handles = [
-    mpatches.Patch(color=p1_colors[g], label=g)
-    for g in agr_order if not df_pts[df_pts["agr_group"] == g].empty
-]
+color_handles = []
+for g in agr_order:
+    sub = df_pts[df_pts["agr_group"] == g]
+    if sub.empty:
+        continue
+    lo, hi = int(sub["length"].min()), int(sub["length"].max())
+    lbl = f"{g}\nn={len(sub)}, {lo}–{hi} aa"
+    color_handles.append(mpatches.Patch(color=p1_colors[g], label=lbl))
 leg1 = ax.legend(handles=color_handles, title="agr group",
                  loc="upper left", bbox_to_anchor=(1.02, 1.0),
                  frameon=True, borderpad=0.7, handlelength=1.2)
