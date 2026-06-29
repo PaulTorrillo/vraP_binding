@@ -39,7 +39,7 @@ with open("final_genes.faa") as fh:
 fasta_names = list(seq_lengths.keys())
 lengths     = np.array(list(seq_lengths.values()))
 
-# ── GMM ───────────────────────────────────────────────────────────────────────
+# ── GMM + truncation split ────────────────────────────────────────────────────
 gmm = GaussianMixture(n_components=2, random_state=42)
 gmm.fit(lengths.reshape(-1, 1))
 gmm_comp         = gmm.predict(lengths.reshape(-1, 1))
@@ -47,6 +47,10 @@ full_comp        = int(np.argmax(gmm.means_))
 name_to_is_trunc = {fasta_names[i]: (gmm_comp[i] != full_comp)
                     for i in range(len(fasta_names))}
 name_to_len      = dict(zip(fasta_names, lengths))
+
+median_len      = np.median(lengths)
+trunc_threshold = 0.9 * median_len
+print(f"Median length: {median_len:.0f} aa  |  90% cutoff: {trunc_threshold:.0f} aa")
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 df_meta    = pd.read_excel("DatasetS1.xlsx", sheet_name="TableS3")
@@ -75,14 +79,19 @@ for fname in sorted(os.listdir(pt_dir)):
     data = torch.load(os.path.join(pt_dir, fname), map_location="cpu")
     vec  = data["mean_representations"][6].numpy()
 
-    agr_group = ("truncated" if name_to_is_trunc.get(label, False)
-                 else acc_to_agr.get(accession, "unknown"))
+    seq_len = name_to_len.get(label, np.nan)
+    if name_to_is_trunc.get(label, False):
+        agr_group = ("slight truncation" if seq_len >= trunc_threshold
+                     else "large truncation")
+    else:
+        agr_group = acc_to_agr.get(accession, "unknown")
+
     assigned  = label_to_assigned.get(label, 0)
     locus     = label_to_locus.get(label, "")
     cluster   = locus_to_cluster.get(locus, "unclustered") if assigned == 1 else "unclustered"
 
     rows.append({"label": label, "vec": vec, "agr_group": agr_group,
-                 "cluster": cluster, "length": name_to_len.get(label, np.nan)})
+                 "cluster": cluster, "length": seq_len})
 
 embeddings = np.array([r["vec"] for r in rows])
 df_pts     = pd.DataFrame([{k: v for k, v in r.items() if k != "vec"} for r in rows])
@@ -104,12 +113,13 @@ ylim = (coords[:, 1].min() - pad * yspan, coords[:, 1].max() + pad * yspan)
 
 # ── Colour + shape maps ───────────────────────────────────────────────────────
 p1_colors = {
-    "gp1":       "#4393C3",
-    "gp2":       "#91CF60",
-    "gp3":       "#D6604D",
-    "gp4":       "#6A3D9A",
-    "unknown":   "#CC7722",
-    "truncated": "black",
+    "gp1":              "#4393C3",
+    "gp2":              "#91CF60",
+    "gp3":              "#D6604D",
+    "gp4":              "#6A3D9A",
+    "unknown":          "#CC7722",
+    "slight truncation": "#888888",
+    "large truncation":  "#000000",
 }
 cluster_markers = {
     "ESM-2 cluster 1": "o",
@@ -122,11 +132,11 @@ cluster_markers = {
 fig, ax = plt.subplots(figsize=(13, 4.5))
 fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 
-agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]
+agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown",
+                 "slight truncation", "large truncation"]
 cluster_order = ["ESM-2 cluster 1", "ESM-2 cluster 2", "ESM-2 cluster 3", "unclustered"]
 
-# draw truncated/unknown at low z-order, rest on top
-zorder_map = {"truncated": 1, "unknown": 1}
+zorder_map = {"slight truncation": 1, "large truncation": 1, "unknown": 1}
 
 for agr in agr_order:
     sub = df_pts[df_pts["agr_group"] == agr]
@@ -141,8 +151,8 @@ for agr in agr_order:
                    c=p1_colors[agr],
                    marker=cluster_markers[clust],
                    s=55, alpha=0.55,
-                   linewidths=1.8 if clust == "unclustered" else 0.4,
-                   edgecolors="none" if clust != "unclustered" else p1_colors[agr],
+                   linewidths=1.8 if clust == "unclustered" else 0.8,
+                   edgecolors=p1_colors[agr] if clust == "unclustered" else "#222222",
                    zorder=zord)
 
 ax.set_xscale("symlog", linthresh=0.2)
@@ -158,9 +168,7 @@ for g in agr_order:
     sub = df_pts[df_pts["agr_group"] == g]
     if sub.empty:
         continue
-    lo, hi = int(sub["length"].min()), int(sub["length"].max())
-    lbl = f"{g}\nn={len(sub)}, {lo}–{hi} aa"
-    color_handles.append(mpatches.Patch(color=p1_colors[g], label=lbl))
+    color_handles.append(mpatches.Patch(color=p1_colors[g], label=g))
 leg1 = ax.legend(handles=color_handles, title="agr group",
                  loc="upper left", bbox_to_anchor=(1.02, 1.0),
                  frameon=True, borderpad=0.7, handlelength=1.2)
