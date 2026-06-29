@@ -107,7 +107,7 @@ p1_colors = {
     "gp3":      "#D6604D",
     "gp4":      "#6A3D9A",
     "unknown":  "#CC7722",
-    "< 427 aa": "#888888",
+    "< 427 aa": "#D2B48C",
     "< 400 aa": "#000000",
 }
 cluster_markers = {
