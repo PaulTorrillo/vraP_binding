@@ -119,7 +119,7 @@ cluster_markers = {
 }
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(11, 6))
+fig, ax = plt.subplots(figsize=(13, 4.5))
 fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 
 agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "truncated"]
