@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
-from sklearn.mixture import GaussianMixture
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -39,18 +38,7 @@ with open("final_genes.faa") as fh:
 fasta_names = list(seq_lengths.keys())
 lengths     = np.array(list(seq_lengths.values()))
 
-# ── GMM + truncation split ────────────────────────────────────────────────────
-gmm = GaussianMixture(n_components=2, random_state=42)
-gmm.fit(lengths.reshape(-1, 1))
-gmm_comp         = gmm.predict(lengths.reshape(-1, 1))
-full_comp        = int(np.argmax(gmm.means_))
-name_to_is_trunc = {fasta_names[i]: (gmm_comp[i] != full_comp)
-                    for i in range(len(fasta_names))}
-name_to_len      = dict(zip(fasta_names, lengths))
-
-median_len      = np.median(lengths)
-trunc_threshold = 0.9 * median_len
-print(f"Median length: {median_len:.0f} aa  |  90% cutoff: {trunc_threshold:.0f} aa")
+name_to_len = dict(zip(fasta_names, lengths))
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 df_meta    = pd.read_excel("DatasetS1.xlsx", sheet_name="TableS3")
@@ -80,9 +68,10 @@ for fname in sorted(os.listdir(pt_dir)):
     vec  = data["mean_representations"][6].numpy()
 
     seq_len = name_to_len.get(label, np.nan)
-    if name_to_is_trunc.get(label, False):
-        agr_group = ("slight truncation" if seq_len >= trunc_threshold
-                     else "large truncation")
+    if seq_len < 400:
+        agr_group = "< 400 aa"
+    elif seq_len < 427:
+        agr_group = "< 427 aa"
     else:
         agr_group = acc_to_agr.get(accession, "unknown")
 
@@ -113,13 +102,13 @@ ylim = (coords[:, 1].min() - pad * yspan, coords[:, 1].max() + pad * yspan)
 
 # ── Colour + shape maps ───────────────────────────────────────────────────────
 p1_colors = {
-    "gp1":              "#4393C3",
-    "gp2":              "#91CF60",
-    "gp3":              "#D6604D",
-    "gp4":              "#6A3D9A",
-    "unknown":          "#CC7722",
-    "slight truncation": "#888888",
-    "large truncation":  "#000000",
+    "gp1":      "#4393C3",
+    "gp2":      "#91CF60",
+    "gp3":      "#D6604D",
+    "gp4":      "#6A3D9A",
+    "unknown":  "#CC7722",
+    "< 427 aa": "#888888",
+    "< 400 aa": "#000000",
 }
 cluster_markers = {
     "ESM-2 cluster 1": "o",
@@ -132,11 +121,10 @@ cluster_markers = {
 fig, ax = plt.subplots(figsize=(13, 4.5))
 fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 
-agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown",
-                 "slight truncation", "large truncation"]
+agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "< 427 aa", "< 400 aa"]
 cluster_order = ["ESM-2 cluster 1", "ESM-2 cluster 2", "ESM-2 cluster 3", "unclustered"]
 
-zorder_map = {"slight truncation": 1, "large truncation": 1, "unknown": 1}
+zorder_map = {"< 427 aa": 1, "< 400 aa": 1, "unknown": 1}
 
 for agr in agr_order:
     sub = df_pts[df_pts["agr_group"] == agr]
