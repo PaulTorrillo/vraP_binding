@@ -68,8 +68,8 @@ for fname in sorted(os.listdir(pt_dir)):
     vec  = data["mean_representations"][6].numpy()
 
     seq_len = name_to_len.get(label, np.nan)
-    if seq_len < 400:
-        agr_group = "< 400 aa"
+    if seq_len < 387:
+        agr_group = "< 387 aa"
     elif seq_len < 427:
         agr_group = "< 427 aa"
     else:
@@ -108,7 +108,7 @@ p1_colors = {
     "gp4":      "#6A3D9A",
     "unknown":  "#CC7722",
     "< 427 aa": "#D2B48C",
-    "< 400 aa": "#000000",
+    "< 387 aa": "#000000",
 }
 cluster_markers = {
     "ESM-2 cluster 1": "o",
@@ -121,10 +121,10 @@ cluster_markers = {
 fig, ax = plt.subplots(figsize=(13, 4.5))
 fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 
-agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "< 427 aa", "< 400 aa"]
+agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "< 427 aa", "< 387 aa"]
 cluster_order = ["ESM-2 cluster 1", "ESM-2 cluster 2", "ESM-2 cluster 3", "unclustered"]
 
-zorder_map = {"< 427 aa": 1, "< 400 aa": 1, "unknown": 1}
+zorder_map = {"< 427 aa": 1, "< 387 aa": 1, "unknown": 1}
 
 for agr in agr_order:
     sub = df_pts[df_pts["agr_group"] == agr]
