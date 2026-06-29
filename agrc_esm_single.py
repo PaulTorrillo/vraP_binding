@@ -124,7 +124,7 @@ fig.subplots_adjust(right=0.62)   # leave room for legends on the right
 agr_order     = ["gp1", "gp2", "gp3", "gp4", "unknown", "< 427 aa", "< 387 aa"]
 cluster_order = ["ESM-2 cluster 1", "ESM-2 cluster 2", "ESM-2 cluster 3", "unclustered"]
 
-zorder_map = {"< 427 aa": 1, "< 387 aa": 1, "unknown": 1}
+zorder_map = {"unknown": 1, "< 427 aa": 3, "< 387 aa": 4}
 
 for agr in agr_order:
     sub = df_pts[df_pts["agr_group"] == agr]
