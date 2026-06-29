@@ -140,7 +140,8 @@ for agr in agr_order:
         ax.scatter(subsub["pc1"], subsub["pc2"],
                    c=p1_colors[agr],
                    marker=cluster_markers[clust],
-                   s=55, alpha=0.55, linewidths=0.4,
+                   s=55, alpha=0.55,
+                   linewidths=1.8 if clust == "unclustered" else 0.4,
                    edgecolors="none" if clust != "unclustered" else p1_colors[agr],
                    zorder=zord)
 
@@ -165,7 +166,7 @@ ax.add_artist(leg1)
 shape_handles = [
     mlines.Line2D([0], [0], marker=cluster_markers[c], color="#444444",
                   linestyle="None", markersize=8,
-                  markeredgewidth=0.4 if c != "unclustered" else 1.2,
+                  markeredgewidth=0.4 if c != "unclustered" else 2.0,
                   label=c)
     for c in cluster_order
 ]
