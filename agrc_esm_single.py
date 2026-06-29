@@ -17,8 +17,8 @@ mpl.rcParams.update({
     "axes.labelsize":        16,
     "xtick.labelsize":       14,
     "ytick.labelsize":       14,
-    "legend.fontsize":       10,
-    "legend.title_fontsize": 11,
+    "legend.fontsize":       8,
+    "legend.title_fontsize": 9,
 })
 
 # ── Parse sequence lengths ────────────────────────────────────────────────────
